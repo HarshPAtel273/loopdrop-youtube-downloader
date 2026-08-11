@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Loopdrop is a fast, private, local YouTube downloader for videos you have permission to save." />
+    <meta name="theme-color" content="#f4f0e8" />
+    <title>Loopdrop — keep the good stuff close</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Loopdrop home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M6 8h13a7 7 0 1 1 0 14H12"/><path d="m8 17 5 5-5 5"/></svg>
+        </span>
+        <span>LOOPDROP</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#how">How it works</a>
+        <a href="#recent">Recent</a>
+      </nav>
+      <span class="local-pill"><i></i> Local mode</span>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="eyebrow"><span>01</span> Your offline queue</div>
+          <h1 id="hero-title">Keep the<br/><em>good stuff</em><br/>close.</h1>
+          <p>Save videos and audio for your next flight, focus session, or patchy commute. Processed locally. No account needed.</p>
+          <a class="text-link" href="#downloader">Start a download <span>↘</span></a>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="record">
+            <div class="record-label"><span>LD</span><small>PLAY<br/>ANYWHERE</small></div>
+          </div>
+          <div class="art-sticker">NO CLOUD<br/>NO CLUTTER</div>
+          <svg class="art-arrow" viewBox="0 0 110 140"><path d="M18 8c71 26 87 67 46 105"/><path d="m45 97 19 16 18-19"/></svg>
+        </div>
+      </section>
+
+      <section class="downloader-wrap" id="downloader" aria-labelledby="download-title">
+        <div class="downloader-card">
+          <div class="card-heading">
+            <div>
+              <span class="step-label">Step one</span>
+              <h2 id="download-title">Drop in a link</h2>
+            </div>
+            <span class="supported"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.2a2.8 2.8 0 0 0-2-2C16.4 4.5 12 4.5 12 4.5s-4.4 0-7 .7a2.8 2.8 0 0 0-2 2A29 29 0 0 0 2.5 12 29 29 0 0 0 3 16.8a2.8 2.8 0 0 0 2 2c2.6.7 7 .7 7 .7s4.4 0 7-.7a2.8 2.8 0 0 0 2-2 29 29 0 0 0 .5-4.8 29 29 0 0 0-.5-4.8Z"/><path d="m10 15.5 5-3.5-5-3.5v7Z"/></svg> YouTube</span>
+          </div>
+
+          <form id="url-form" novalidate>
+            <label class="sr-only" for="video-url">YouTube video URL</label>
+            <div class="url-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7"/><path d="M13.4 10.6a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7"/></svg>
+              <input id="video-url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="Paste a YouTube link here…" required />
+              <button class="paste-button" id="paste-button" type="button">Paste</button>
+            </div>
+            <button class="fetch-button" id="fetch-button" type="submit">
+              <span>Fetch video</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </form>
+          <p class="form-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg> Your link is processed on this device and is never stored.</p>
+
+          <div class="inline-error" id="form-error" role="alert" hidden></div>
+
+          <section class="video-result" id="video-result" aria-live="polite" hidden>
+            <div class="section-rule"><span>Video found</span></div>
+            <div class="video-preview">
+              <div class="thumbnail-wrap">
+                <img id="video-thumbnail" alt="" referrerpolicy="no-referrer" />
+                <span id="video-duration">0:00</span>
+              </div>
+              <div class="video-meta">
+                <p id="video-channel"></p>
+                <h3 id="video-title"></h3>
+                <div id="video-stats"></div>
+              </div>
+            </div>
+
+            <fieldset class="format-picker">
+              <legend><span class="step-label">Step two</span> Choose your format</legend>
+              <div class="format-grid">
+                <label class="format-option selected">
+                  <input type="radio" name="preset" value="1080p" checked />
+                  <span class="format-icon">HD</span><strong>Full HD</strong><small>1080p · MP4</small><i></i>
+                </label>
+                <label class="format-option">
+                  <input type="radio" name="preset" value="720p" />
+                  <span class="format-icon">HD</span><strong>HD</strong><small>720p · MP4</small><i></i>
+                </label>
+                <label class="format-option">
+                  <input type="radio" name="preset" value="480p" />
+                  <span class="format-icon">SD</span><strong>Data saver</strong><small>480p · MP4</small><i></i>
+                </label>
+                <label class="format-option">
+                  <input type="radio" name="preset" value="mp3" />
+                  <span class="format-icon">♪</span><strong>Audio only</strong><small>Best audio · MP3</small><i></i>
+                </label>
+              </div>
+            </fieldset>
+
+            <button class="download-button" id="download-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              <span>Download now</span>
+            </button>
+
+            <div class="progress-panel" id="progress-panel" hidden>
+              <div class="progress-top"><span id="progress-status">Preparing your download…</span><strong id="progress-percent">0%</strong></div>
+              <div class="progress-track"><i id="progress-bar"></i></div>
+              <p id="progress-detail">This can take a moment for longer videos.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="how-section" id="how" aria-labelledby="how-title">
+        <div class="section-intro">
+          <span class="eyebrow"><span>02</span> Tiny workflow</span>
+          <h2 id="how-title">Three steps.<br/>Then you’re offline.</h2>
+        </div>
+        <ol class="steps-list">
+          <li><span>1</span><div><strong>Paste a link</strong><p>Copy the URL from YouTube and drop it into the field above.</p></div></li>
+          <li><span>2</span><div><strong>Pick a format</strong><p>Choose crisp video, a smaller file, or take just the audio.</p></div></li>
+          <li><span>3</span><div><strong>Keep it close</strong><p>Your file lands in Downloads, ready whenever Wi-Fi isn’t.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="recent-section" id="recent" aria-labelledby="recent-title">
+        <div class="recent-heading">
+          <div><span class="eyebrow"><span>03</span> On this browser</span><h2 id="recent-title">Recent drops</h2></div>
+          <button id="clear-history" type="button">Clear history</button>
+        </div>
+        <div class="history-list" id="history-list"></div>
+        <div class="empty-history" id="empty-history">
+          <span>↙</span><p>Nothing here yet.<br/><small>Your completed downloads will show up here.</small></p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">↘</span><span>LOOPDROP</span></a>
+      <p>For videos you own or have permission to download.<br/>Respect creators and YouTube’s terms.</p>
+      <span class="footer-tag">BUILT FOR<br/>THE OFFLINE HOURS</span>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

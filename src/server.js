@@ -29,7 +29,8 @@ export function createApp({ jobStore = new JobStore() } = {}) {
 
   app.get('/api/health', async (_request, response) => {
     const dependencies = await checkDependencies();
-    response.status(dependencies.ytDlp && dependencies.ffmpeg ? 200 : 503).json({ ok: dependencies.ytDlp && dependencies.ffmpeg, dependencies });
+    const ok = dependencies.ytDlp && dependencies.ffmpeg && dependencies.jsRuntime;
+    response.status(ok ? 200 : 503).json({ ok, dependencies });
   });
 
   app.get('/api/presets', (_request, response) => {
@@ -90,7 +91,7 @@ export function createApp({ jobStore = new JobStore() } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  createApp().listen(port, () => {
+  createApp().listen(port, '127.0.0.1', () => {
     console.log(`Loopdrop is ready at http://localhost:${port}`);
   });
 }

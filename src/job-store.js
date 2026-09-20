@@ -5,6 +5,10 @@ import { makeJobDirectory, removeJobDirectory, startYtDlpDownload, UserError } f
 const JOB_TTL_MS = 30 * 60 * 1_000;
 const MAX_ACTIVE_DOWNLOADS = 2;
 
+export function overallProgress(previous, current) {
+  return Math.max(previous, Math.min(99, current));
+}
+
 export class JobStore {
   constructor() {
     this.jobs = new Map();
@@ -35,6 +39,7 @@ export class JobStore {
       filename: '',
       error: '',
       createdAt: Date.now(),
+      finishedAt: null,
     };
     this.jobs.set(id, job);
     this.run(job, url, presetId);
@@ -58,7 +63,13 @@ export class JobStore {
         url,
         presetId,
         outputDir: job.directory,
-        onProgress: (progress) => Object.assign(job, { ...progress, status: 'downloading' }),
+        onProgress: (progress) => Object.assign(job, {
+          ...progress,
+          // A video and its audio are separate transfers. Keep the overall bar
+          // moving forward while the second stream and merge finish.
+          progress: overallProgress(job.progress, progress.percent),
+          status: 'downloading',
+        }),
       });
       Object.assign(job, { ...file, status: 'ready', progress: 100, speed: '', eta: '' });
     } catch (error) {
@@ -66,6 +77,7 @@ export class JobStore {
       job.error = error instanceof UserError ? error.message : 'The download stopped unexpectedly. Try again.';
       await removeJobDirectory(job.directory);
     } finally {
+      job.finishedAt = Date.now();
       this.activeDownloads -= 1;
     }
   }
@@ -81,7 +93,7 @@ export class JobStore {
     const cutoff = Date.now() - JOB_TTL_MS;
     await Promise.all(
       [...this.jobs.values()]
-        .filter((job) => job.createdAt < cutoff && !['queued', 'downloading'].includes(job.status))
+        .filter((job) => job.finishedAt && job.finishedAt < cutoff)
         .map((job) => this.remove(job.id)),
     );
   }

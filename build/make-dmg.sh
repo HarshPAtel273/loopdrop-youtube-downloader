@@ -4,20 +4,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="dist/Loopdrop-darwin-arm64/Loopdrop.app"
-STAGING="dist/dmg-staging"
-OUT="dist/Loopdrop.dmg"
+APP="${LOOPDROP_APP_PATH:-dist/Loopdrop-darwin-arm64/Loopdrop.app}"
+VERSION="$(node -p "require('./package.json').version")"
+OUT="dist/Loopdrop-$VERSION.dmg"
 
 [ -d "$APP" ] || { echo "Run npm run package first."; exit 1; }
 
-# Ad-hoc signature keeps macOS from flagging the app as damaged on other Macs.
+# Seal the local build; distribution to other Macs still requires notarization.
 codesign --force --deep --sign - "$APP"
 
-rm -rf "$STAGING" "$OUT"
-mkdir -p "$STAGING"
+STAGING="$(mktemp -d "${TMPDIR:-/tmp}/loopdrop-dmg.XXXXXX")"
+trap 'rm -r "$STAGING"' EXIT
 ditto "$APP" "$STAGING/Loopdrop.app"
 ln -s /Applications "$STAGING/Applications"
 
 hdiutil create -volname "Loopdrop" -srcfolder "$STAGING" -ov -format UDZO "$OUT"
-rm -rf "$STAGING"
 echo "Created $OUT"

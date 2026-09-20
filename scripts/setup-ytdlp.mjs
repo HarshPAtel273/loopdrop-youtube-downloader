@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
-import { access, chmod, mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { access, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binaryName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
@@ -10,12 +14,32 @@ const binaryPath = path.join(projectRoot, 'bin', binaryName);
 
 await mkdir(path.dirname(binaryPath), { recursive: true });
 
+const installedVersion = await getInstalledVersion();
 try {
-  await access(binaryPath, constants.X_OK);
-  console.log(`yt-dlp is ready at ${binaryPath}`);
-} catch {
-  console.log('Downloading the latest yt-dlp binary…');
   const release = await fetchJson('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest');
+  if (installedVersion === release.tag_name) {
+    console.log(`yt-dlp ${installedVersion} is up to date.`);
+  } else {
+    console.log(`Installing yt-dlp ${release.tag_name}${installedVersion ? ` (replacing ${installedVersion})` : ''}…`);
+    await installRelease(release);
+    console.log(`yt-dlp ${release.tag_name} installed at ${binaryPath}`);
+  }
+} catch (error) {
+  if (!installedVersion) throw error;
+  console.warn(`Could not update yt-dlp: ${error.message}. Keeping ${installedVersion}; run npm run update:downloader later.`);
+}
+
+async function getInstalledVersion() {
+  try {
+    await access(binaryPath, constants.X_OK);
+    const { stdout } = await execFileAsync(binaryPath, ['--version'], { timeout: 30_000 });
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
+
+async function installRelease(release) {
   const assetName = getAssetName();
   const asset = release.assets.find((item) => item.name === assetName);
   const checksumsAsset = release.assets.find((item) => item.name === 'SHA2-256SUMS');
@@ -30,11 +54,14 @@ try {
   const actual = createHash('sha256').update(binary).digest('hex');
   if (!expected || actual !== expected) throw new Error('The downloaded yt-dlp checksum did not match the published release.');
 
-  await writeFile(binaryPath, binary, { mode: 0o755 });
-  if (process.platform !== 'win32') {
-    await chmod(binaryPath, 0o755);
+  const temporaryPath = `${binaryPath}.download-${process.pid}`;
+  try {
+    await writeFile(temporaryPath, binary, { mode: 0o755 });
+    if (process.platform !== 'win32') await chmod(temporaryPath, 0o755);
+    await rename(temporaryPath, binaryPath);
+  } finally {
+    await rm(temporaryPath, { force: true });
   }
-  console.log(`yt-dlp installed at ${binaryPath}`);
 }
 
 function getAssetName() {

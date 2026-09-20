@@ -1,6 +1,6 @@
 {
   "name": "loopdrop-youtube-downloader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "A polished local YouTube downloader side project powered by yt-dlp.",
   "type": "module",
@@ -10,10 +10,11 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "app": "electron .",
+    "update:downloader": "node scripts/setup-ytdlp.mjs",
     "package": "electron-packager . Loopdrop --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --no-asar --ignore=\"^/dist\" --ignore=\"^/test\" --ignore=\"^/build\"",
     "dmg": "bash build/make-dmg.sh",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/youtube.js && node --check public/app.js"
+    "check": "node --check src/config.js && node --check src/job-store.js && node --check src/server.js && node --check src/youtube.js && node --check scripts/setup-ytdlp.mjs && node --check electron/main.js && node --check public/app.js"
   },
   "engines": {
     "node": ">=20"
@@ -23,7 +24,8 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
     "ffmpeg-static": "^5.3.0",
-    "helmet": "^8.1.0"
+    "helmet": "^8.1.0",
+    "node": "^22.16.0"
   },
   "devDependencies": {
     "@electron/packager": "^20.2.1",

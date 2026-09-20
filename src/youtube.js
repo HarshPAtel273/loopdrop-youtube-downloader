@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { access, mkdir, readdir, rm } from 'node:fs/promises';
+import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { ffmpegBinaryPath, presets, tempRoot, ytDlpPath } from './config.js';
+import { ffmpegBinaryPath, jsRuntimePath, maxDownloadSize, presets, tempRoot, ytDlpPath } from './config.js';
 
 const MAX_METADATA_BYTES = 6 * 1024 * 1024;
 const ALLOWED_HOSTS = new Set([
@@ -50,20 +50,22 @@ export async function checkDependencies() {
   const checks = await Promise.allSettled([
     access(ytDlpPath, constants.X_OK),
     access(ffmpegBinaryPath, constants.X_OK),
+    access(jsRuntimePath, constants.X_OK),
   ]);
   return {
     ytDlp: checks[0].status === 'fulfilled',
     ffmpeg: checks[1].status === 'fulfilled',
+    jsRuntime: checks[2].status === 'fulfilled',
   };
 }
 
 export async function getVideoPreview(rawUrl) {
   const url = normalizeYouTubeUrl(rawUrl);
   const output = await runCapture([
+    ...runtimeArgs(),
     '--dump-single-json',
     '--skip-download',
     '--no-playlist',
-    '--no-warnings',
     '--socket-timeout',
     '20',
     url,
@@ -94,17 +96,18 @@ export async function getVideoPreview(rawUrl) {
   };
 }
 
-export function startYtDlpDownload({ url: rawUrl, presetId, outputDir, onProgress }) {
+export function buildDownloadArgs({ url: rawUrl, presetId, outputDir }) {
   const url = normalizeYouTubeUrl(rawUrl);
   const preset = getPreset(presetId);
   const outputTemplate = path.join(outputDir, '%(title).120B [%(id)s].%(ext)s');
   const args = [
+    ...runtimeArgs(),
     '--no-playlist',
     '--newline',
-    '--no-warnings',
+    '--progress',
     '--restrict-filenames',
     '--max-filesize',
-    '500M',
+    maxDownloadSize,
     '--match-filter',
     'duration <= 7200 & !is_live',
     '--socket-timeout',
@@ -117,6 +120,8 @@ export function startYtDlpDownload({ url: rawUrl, presetId, outputDir, onProgres
     'download:PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
     '--print',
     'after_move:FILE:%(filepath)s',
+    '-S',
+    'vcodec:h264,res,acodec:m4a',
     '-f',
     preset.selector,
     '-o',
@@ -129,7 +134,12 @@ export function startYtDlpDownload({ url: rawUrl, presetId, outputDir, onProgres
     args.push('--merge-output-format', 'mp4', '--remux-video', 'mp4');
   }
   args.push(url);
+  return args;
+}
 
+export async function startYtDlpDownload({ url, presetId, outputDir, onProgress }) {
+  await ensureDependencies();
+  const args = buildDownloadArgs({ url, presetId, outputDir });
   return new Promise((resolve, reject) => {
     const child = spawn(ytDlpPath, args, { windowsHide: true });
     let stdoutBuffer = '';
@@ -163,7 +173,13 @@ export function startYtDlpDownload({ url: rawUrl, presetId, outputDir, onProgres
     child.on('error', (error) => reject(error));
     child.on('close', async (code) => {
       if (code !== 0) {
+        console.warn(`yt-dlp download failed: ${stderr.trim().slice(-2_000) || `exit ${code}`}`);
         reject(new UserError(friendlyYtDlpError(stderr), 422));
+        return;
+      }
+
+      if (/file is larger than max-filesize/i.test(stderr)) {
+        reject(new UserError('This file exceeds the 2 GB safety limit. Choose a smaller format.', 422));
         return;
       }
 
@@ -171,8 +187,12 @@ export function startYtDlpDownload({ url: rawUrl, presetId, outputDir, onProgres
         const files = await readdir(outputDir);
         const fallback = files.find((file) => !file.endsWith('.part') && !file.endsWith('.ytdl'));
         const filePath = reportedPath || (fallback ? path.join(outputDir, fallback) : '');
-        if (!filePath) throw new Error('No completed output file was found.');
-        resolve({ filePath, filename: path.basename(filePath) });
+        if (!filePath) throw new UserError('YouTube did not deliver a complete file. Try again or choose another format.', 422);
+        const resolvedPath = path.resolve(filePath);
+        if (path.dirname(resolvedPath) !== path.resolve(outputDir)) throw new Error('yt-dlp reported a file outside its job directory.');
+        const result = await stat(resolvedPath);
+        if (!result.isFile() || result.size === 0) throw new UserError('YouTube did not deliver a complete file. Try again.', 422);
+        resolve({ filePath: resolvedPath, filename: path.basename(resolvedPath) });
       } catch (error) {
         reject(error);
       }
@@ -193,9 +213,7 @@ export async function removeJobDirectory(directory) {
 }
 
 async function runCapture(args, timeoutMs) {
-  await access(ytDlpPath, constants.X_OK).catch(() => {
-    throw new UserError('The downloader is not installed. Run npm install and try again.', 503);
-  });
+  await ensureDependencies();
 
   return new Promise((resolve, reject) => {
     const child = spawn(ytDlpPath, args, { windowsHide: true });
@@ -226,21 +244,39 @@ async function runCapture(args, timeoutMs) {
       clearTimeout(timeout);
       if (code === 0) resolve(stdout);
       else if (signal === 'SIGKILL') reject(new UserError('YouTube took too long to respond. Try again.'));
-      else reject(new UserError(friendlyYtDlpError(stderr), 422));
+      else {
+        console.warn(`yt-dlp preview failed: ${stderr.trim().slice(-2_000) || `exit ${code}`}`);
+        reject(new UserError(friendlyYtDlpError(stderr), 422));
+      }
     });
   });
 }
 
-function friendlyYtDlpError(rawError = '') {
+async function ensureDependencies() {
+  const dependencies = await checkDependencies();
+  if (!dependencies.ytDlp) throw new UserError('The downloader is missing. Run npm install and try again.', 503);
+  if (!dependencies.jsRuntime) throw new UserError('The JavaScript runtime is missing. Run npm install and try again.', 503);
+  if (!dependencies.ffmpeg) throw new UserError('The media converter is missing. Run npm install and try again.', 503);
+}
+
+function runtimeArgs() {
+  return ['--no-config', '--js-runtimes', `node:${jsRuntimePath}`];
+}
+
+export function friendlyYtDlpError(rawError = '') {
   const error = rawError.toLowerCase();
+  if (error.includes('http error 403')) return 'YouTube blocked this media stream. Update the downloader and try again.';
+  if (error.includes('http error 429') || error.includes('too many requests')) return 'YouTube is temporarily limiting requests. Please try again later.';
   if (error.includes('private video')) return 'That video is private.';
   if (error.includes('sign in') || error.includes('age-restricted')) return 'That video requires sign-in and cannot be downloaded here.';
   if (error.includes('copyright')) return 'That video is unavailable because of a copyright restriction.';
   if (error.includes('not available') || error.includes('unavailable')) return 'That video is not available in this region or has been removed.';
-  if (error.includes('larger than max-filesize') || error.includes('max-filesize')) return 'That file is larger than the 500 MB project limit.';
+  if (error.includes('larger than max-filesize') || error.includes('max-filesize')) return 'That file is larger than the 2 GB safety limit.';
   if (error.includes('does not pass filter')) return 'Live streams and videos over two hours are not supported.';
   if (error.includes('requested format is not available')) return 'That quality is not available for this video. Try another format.';
-  return 'The video could not be processed. It may be restricted or temporarily unavailable.';
+  if (error.includes('timed out') || error.includes('connection reset')) return 'The connection to YouTube was interrupted. Try again.';
+  if (error.includes('ffmpeg')) return 'The video could not be converted. Run npm install and try again.';
+  return 'YouTube could not complete this request. Try again, or update the downloader if it keeps happening.';
 }
 
 function safeThumbnail(value) {

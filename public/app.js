@@ -118,7 +118,7 @@ function updateProgress(job) {
   const percent = Math.round(job.progress || 0);
   document.querySelector('#progress-percent').textContent = `${percent}%`;
   document.querySelector('#progress-bar').style.width = `${percent}%`;
-  const statusText = job.status === 'ready' ? 'Ready — sending to Downloads' : job.status === 'queued' ? 'Getting things ready…' : 'Downloading your file…';
+  const statusText = job.status === 'ready' ? 'Ready — sending to Downloads' : job.status === 'queued' ? 'Getting things ready…' : percent >= 99 ? 'Finishing your file…' : 'Downloading your file…';
   document.querySelector('#progress-status').textContent = statusText;
   const details = [job.speed, job.eta ? `${job.eta} remaining` : ''].filter(Boolean);
   document.querySelector('#progress-detail').textContent = details.join(' · ') || 'This can take a moment for longer videos.';
